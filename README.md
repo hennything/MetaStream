@@ -1,6 +1,7 @@
 ## Table of contents
 * [General info](#general-info)
 * [Usage](#usage)
+* [Example](#example)
 * [References](#references)
 
 ## General info
@@ -50,8 +51,12 @@ Scoring methods:
 * ensemble (optional): prediction at the base level is performed by all learners and averaged accross predictions
 
 ```Python
-meta.meta_train(ådata=df, target='nswdemand')
+meta.meta_train(data=df, target='nswdemand')
 ```
+
+## Example
+
+Example usage can be found in the examples folder. Download the [Elictricity Demand Prediction](https://www.openml.org/d/151) (EDP) dataset.
 
 ## References
 

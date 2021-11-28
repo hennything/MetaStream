@@ -179,7 +179,7 @@ class MetaStream():
             # TODO: generate output for default method
             if default:
                 default_learner = int(self.meta_table['regressor'].value_counts().idxmax())
-                default_recommended.append(default_recommended)
+                default_recommended.append(default_learner)
                 default_score = nmse(list(y_sel), self.learners[default_learner].fit(X_train, y_train).predict(X_sel))
                 default_scores.append(default_score)
 
@@ -206,7 +206,8 @@ class MetaStream():
         
         if default:
             print("Mean score default {:.2f}+-{:.2f}".format(np.mean(default_scores), np.std(default_scores)))
-            print(len(m_actual), len(default_recommended))
+            # print(len(m_actual), len(default_recommended))
+            # print(default_recommended)
             print(len([i for i, j in zip(m_actual, default_recommended) if i == j]) / len(m_actual))
 
         if ensemble:
