@@ -1,6 +1,7 @@
 ## Table of contents
 * [General info](#general-info)
 * [Usage](#usage)
+* [References] (#references)
 
 ## General info
 MetaStream Python implementation for streaming data
@@ -51,3 +52,7 @@ Scoring methods:
 ```Python
 meta.meta_train(ådata=df, target='nswdemand')
 ```
+
+## References
+
+.. [Neuro2014] Rossi, André Luis Debiaso, et al. "MetaStream: A meta-learning based method for periodic algorithm selection in time-changing data." Neurocomputing 127 (2014): 52-64
