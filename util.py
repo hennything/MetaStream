@@ -19,6 +19,11 @@ def nmse(y_pred, y_true):
     norm = np.square(np.subtract(means, y_true)).mean()
     return mse / norm
 
+def percentage_difference(values):
+    num = np.abs(values[0] - values[1])
+    den = np.sum(values) / 2
+    return (num / den) * 100
+
 # def average(data):
 #     return np.mean(data)
 

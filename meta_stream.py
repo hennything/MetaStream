@@ -3,28 +3,20 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 # from sklearn.svm import SVR
 from sklearn.gaussian_process import GaussianProcessRegressor
 
-# from sklearn.model_selection import KFold, train_test_split
-# from sklearn.metrics import cohen_kappa_score, mean_squared_error, classification_report, accuracy_score, make_scorer
-# from imblearn.metrics import geometric_mean_score, classification_report_imbalanced
-
 import argparse
 import pathlib
 import pandas as pd
 import numpy as np
 import scipy
 
-# import rpy2.robjects as ro
-# from rpy2.robjects.packages import importr
-# from rpy2.robjects import pandas2ri
-# from rpy2.robjects.conversion import localconverter
+from util import nmse, percentage_difference
 
-from util import nmse
-
+TIE = 'tie'
 
 class MetaStream():
 
     # TODO: add error message if the size of the initial meta-table has less instances than features
-    def __init__(self, meta_learner, learners, base_window=100, base_sel_window_size=10, meta_window=200):
+    def __init__(self, meta_learner, learners, base_window=100, base_sel_window_size=10, meta_window=200, strategy=None, threshold=None):
 
         self.meta_learner = meta_learner
         self.learners = learners
@@ -32,6 +24,16 @@ class MetaStream():
         self.base_window = base_window
         self.base_sel_window_size = base_sel_window_size
         self.meta_window = meta_window
+        self.strategy = strategy
+        self.threshold = threshold
+        self.num_learners = len(self.learners)
+
+        if self.strategy != None and len(self.learners) > 2:
+            raise ValueError("When using 'tie' or 'combination' strategy MetaStream must receive exactly 2 learners")
+        elif self.strategy != None and self.strategy != TIE and self.strategy != 'combination':
+            raise ValueError("strategy can only be 1 of 3 options (None, 'tie', 'combination')")
+        elif self.strategy == TIE and self.threshold == None:
+            raise ValueError("When using 'tie' strategy threshold must be provided")
 
         self.meta_table = pd.DataFrame()
 
@@ -102,6 +104,11 @@ class MetaStream():
 
         # return temp
 
+    def ensemble(self, X_train, y_train, X_sel, y_sel):
+        scores = [learner.fit(X_train, y_train).predict(X_sel) for learner in self.learners]
+        scores = np.array([sum(i)/len(self.learners) for i in zip(*scores)])
+        score = nmse(list(y_sel), scores)
+        return score
 
    # NOTE: initial base fit   
     def base_train(self, data, target):
@@ -123,18 +130,25 @@ class MetaStream():
 
             preds = self.base_predict(X_sel)
             scores = [nmse(pred, y_sel) for pred in preds]
-            meta_features.update({'regressor' : np.argmin(scores)})
+            if self.strategy == None:
+                meta_features.update({'regressor' : np.argmin(scores)})    
+            elif self.strategy == TIE:
+                if percentage_difference(scores) <= self.threshold:
+                    meta_features.update({'regressor' : self.num_learners})
+                else:
+                    meta_features.update({'regressor' : np.argmin(scores)})
 
             self.meta_table = self.meta_table.append(meta_features, ignore_index=True)
 
         # self.base_index = idx
+        print(self.meta_table)
 
-
+    # TODO: make private
     # NOTE: base fit is performed on the base-learners
     def base_fit(self, X, y):
         [learner.fit(X, y) for learner in self.learners]
     
-
+    # TODO: make private
     # NOTE: base predict is performed on the base-learners
     def base_predict(self, X):
         """
@@ -150,6 +164,7 @@ class MetaStream():
         self.meta_fit(self.meta_table.drop(['regressor'], axis=1), self.meta_table['regressor'])
         
         max_data_size = int((data.shape[0] - self.base_window) / self.base_sel_window_size)
+        print(max_data_size)
 
         if default: 
             default_scores = []
@@ -163,6 +178,8 @@ class MetaStream():
 
         for idx in range(self.meta_window, max_data_size):
             
+            print(idx)
+
             train = data.iloc[idx * self.base_sel_window_size : idx * self.base_sel_window_size + self.base_window]
             sel = data.iloc[idx * self.base_sel_window_size + self.base_window : (idx + 1) * self.base_sel_window_size + self.base_window]
 
@@ -173,30 +190,46 @@ class MetaStream():
             pred = int(self.meta_predict(np.array(list(meta_features.values()), dtype=object).reshape(1, -1)))
             m_recommended.append(pred)
 
-            score = nmse(list(y_sel), self.learners[pred].fit(X_train, y_train).predict(X_sel))
-            score_recommended.append(score)
+
+            if self.strategy == None: 
+                score = nmse(list(y_sel), self.learners[pred].fit(X_train, y_train).predict(X_sel))
+                score_recommended.append(score)
+            
+            elif self.strategy == TIE:
+                score_recommended.append(self.ensemble(X_train, y_train, X_sel, y_sel))
 
             # TODO: generate output for default method
             if default:
                 default_learner = int(self.meta_table['regressor'].value_counts().idxmax())
                 default_recommended.append(default_learner)
-                default_score = nmse(list(y_sel), self.learners[default_learner].fit(X_train, y_train).predict(X_sel))
-                default_scores.append(default_score)
+                if default_learner == self.num_learners and self.strategy != None:
+                    default_scores.append(self.ensemble(X_train, y_train, X_sel, y_sel))
+                else:
+                    default_score = nmse(list(y_sel), self.learners[default_learner].fit(X_train, y_train).predict(X_sel))
+                    default_scores.append(default_score)
 
-            # TODO: generate output for ensemble method
+            # TODO: make seperate function for this method
             if ensemble:
-                ensemble_preds = [learner.fit(X_train, y_train).predict(X_sel) for learner in self.learners]
-                ensemble_preds = np.array([sum(i)/len(self.learners) for i in zip(*ensemble_preds)])
-                ensemble_score = nmse(list(y_sel), ensemble_preds)
-                ensemble_scores.append(ensemble_score)
+                ensemble_scores.append(self.ensemble(X_train, y_train, X_sel, y_sel))
 
             self.base_fit(X_train, y_train)
             preds = self.base_predict(X_sel)
             scores = [nmse(pred, y_sel) for pred in preds]
-            min_score = np.argmin(scores)
+            if self.strategy == None:
+                regressor = np.argmin(scores)
+                m_actual.append(np.argmin(regressor))
+                meta_features.update({'regressor' : np.argmin(regressor)})
 
-            m_actual.append(min_score)
-            meta_features.update({'regressor' : np.argmin(scores)})
+            elif self.strategy == 'tie':
+                if percentage_difference(scores) > self.threshold:
+                    regressor = np.argmin(scores)
+                    m_actual.append(regressor)
+                    meta_features.update({'regressor' : regressor})
+                    # print('regressor: ', regressor, scores)
+                else:
+                    m_actual.append(2)
+                    meta_features.update({'regressor' : self.num_learners})
+                    # print('tie: ', scores)
             
             # sliding window for the meta-table
             self.meta_fit(self.meta_table.drop(['regressor'], axis=1)[-self.meta_window:], self.meta_table['regressor'][-self.meta_window:])
@@ -214,12 +247,12 @@ class MetaStream():
             print("Mean score ensemble {:.2f}+-{:.2f}".format(np.mean(ensemble_scores), np.std(ensemble_scores)))
 
 
-
+    # TODO: make private
     # NOTE: meta fit is performed on the meta-learner
     def meta_fit(self, X, y):
         self.meta_learner.fit(X, y)
 
-
+    # TODO: make private
     # NOTE: meta predict is performed on the meta-learner
     def meta_predict(self, X):
         """
@@ -256,7 +289,6 @@ if __name__ == "__main__":
     models =    [
                 # SVR(),
                 RandomForestRegressor(random_state=42),
-                GaussianProcessRegressor(random_state=42),
                 # LinearRegression(),
                 # Lasso(),
                 # Ridge(),
@@ -267,7 +299,7 @@ if __name__ == "__main__":
     # NOTE: meta-learner
     meta_learner = SGDClassifier()
 
-    metas = MetaStream(meta_learner, models, base_data_window, base_sel_window_size, meta_data_window)
+    metas = MetaStream(meta_learner, models, base_data_window, base_sel_window_size, meta_data_window, strategy='tie', threshold=5)
 
     # creates baseline meta-data
     metas.base_train(data=df, target='nswdemand')
