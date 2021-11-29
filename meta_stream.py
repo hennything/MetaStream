@@ -13,10 +13,10 @@ import pandas as pd
 import numpy as np
 import scipy
 
-import rpy2.robjects as ro
-from rpy2.robjects.packages import importr
-from rpy2.robjects import pandas2ri
-from rpy2.robjects.conversion import localconverter
+# import rpy2.robjects as ro
+# from rpy2.robjects.packages import importr
+# from rpy2.robjects import pandas2ri
+# from rpy2.robjects.conversion import localconverter
 
 from util import nmse
 
