@@ -178,7 +178,7 @@ class MetaStream():
 
         for idx in range(self.meta_window, max_data_size):
             
-            print(idx)
+            # print(idx)
 
             train = data.iloc[idx * self.base_sel_window_size : idx * self.base_sel_window_size + self.base_window]
             sel = data.iloc[idx * self.base_sel_window_size + self.base_window : (idx + 1) * self.base_sel_window_size + self.base_window]
@@ -299,7 +299,7 @@ if __name__ == "__main__":
     # NOTE: meta-learner
     meta_learner = SGDClassifier()
 
-    metas = MetaStream(meta_learner, models, base_data_window, base_sel_window_size, meta_data_window, strategy='tie', threshold=5)
+    metas = MetaStream(meta_learner, models, base_data_window, base_sel_window_size, meta_data_window, strategy='tie', threshold=.05)
 
     # creates baseline meta-data
     metas.base_train(data=df, target='nswdemand')

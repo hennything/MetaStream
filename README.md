@@ -29,6 +29,14 @@ from meta_stream.py import MetaStream
 * base_window:
 * base_sel_window_size:
 * meta_window:
+* strategy: defalut is None, other methods include 'tie' and 'combination'
+* threshold: defalut is None, is strategy is 'tie' threshold must be a positive value between (0-1)
+
+### Instantiate:
+
+```Python
+meta = MetaStream(meta_learner, learners)
+```
 
 ### Run base-fit (note that the size of the meta-table generated must be larger than the number of parameters):
 
@@ -37,8 +45,6 @@ Parameters:
 *
 
 ```Python
-meta = MetaStream(meta_learner, learners)
-
 meta.base_train(data=df, target='nswdemand')
 ```
 

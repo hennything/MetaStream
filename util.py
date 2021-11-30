@@ -22,7 +22,7 @@ def nmse(y_pred, y_true):
 def percentage_difference(values):
     num = np.abs(values[0] - values[1])
     den = np.sum(values) / 2
-    return (num / den) * 100
+    return (num / den)
 
 # def average(data):
 #     return np.mean(data)
