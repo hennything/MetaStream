@@ -1,6 +1,7 @@
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, SGDClassifier
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
 
 import argparse
 import pathlib
@@ -281,7 +282,7 @@ if __name__ == "__main__":
 
 
     # NOTE: meta-learner
-    meta_learner = SGDClassifier()
+    meta_learner = RandomForestClassifier()
 
     metas = MetaStream(meta_learner, models, base_data_window, base_sel_window_size, meta_data_window, strategy='combination', threshold=.05)
 
