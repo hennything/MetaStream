@@ -53,19 +53,35 @@ class MetaStream():
             temp.update({"X_train_median_"+str(i): np.median(X_train[col])})
 
         # train window
+        y_train_percentiles = np.percentile(y_train, (25, 75))
+        y_train_iqr = y_train_percentiles[1] - y_train_percentiles[0]
+        y_train_lower_outliers = np.where(y_train < y_train_percentiles[0] - 1.5 * y_train_iqr)[0]
+        y_train_upper_outliers = np.where(y_train > y_train_percentiles[1] + 1.5 * y_train_iqr)[0]
+        y_train_prob_outliers = (len(y_train_lower_outliers) + len(y_train_upper_outliers)) / len(y_train)
+
         temp.update({"y_train_mean_"+str(i): np.mean(y_train)})
         temp.update({"y_train_var_"+str(i): np.var(y_train)})
         temp.update({"y_train_min_"+str(i): np.min(y_train)})
         temp.update({"y_train_max_"+str(i): np.max(y_train)})
         temp.update({"y_train_median_"+str(i): np.median(y_train)})
+        temp.update({"y_train_prob_outliers_"+str(i): y_train_prob_outliers})
+        temp.update({"y_train_dispersion_"+str(i): y_train_iqr})
 
         # selection window
         for i, col in enumerate(X_sel):
+            X_sel_percentiles = np.percentile(X_sel[col], (25, 75))
+            X_sel_iqr = X_sel_percentiles[1] - X_sel_percentiles[0]
+            X_sel_lower_outliers = np.where(X_sel[col] < X_sel_percentiles[0] - 1.5 * X_sel_iqr)[0]
+            X_sel_upper_outliers = np.where(X_sel[col] > X_sel_percentiles[1] + 1.5 * X_sel_iqr)[0]
+            X_sel_prob_outliers = (len(X_sel_lower_outliers) + len(X_sel_upper_outliers)) / len(X_sel)
+
             temp.update({"X_sel_mean_"+str(i): np.mean(X_sel[col])})
             temp.update({"X_sel_var_"+str(i): np.var(X_sel[col])})
             temp.update({"X_sel_min_"+str(i): np.min(X_sel[col])})
             temp.update({"X_sel_max_"+str(i): np.max(X_sel[col])})
             temp.update({"X_sel_median_"+str(i): np.median(X_sel[col])})
+            temp.update({"X_sel_prob_outliers_"+str(i): X_sel_prob_outliers})
+            temp.update({"X_sel_dispersion_"+str(i): X_sel_iqr})
 
         # selection window
         # correlation between numerical attributes
