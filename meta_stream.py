@@ -189,6 +189,7 @@ class MetaStream():
 
             meta_features = self.meta_features(X_train, y_train, X_sel)
             pred = int(self.meta_predict(np.array(list(meta_features.values()), dtype=object).reshape(1, -1)))
+            print(pred)
             m_recommended.append(pred)
 
             if self.strategy == None: 
@@ -241,23 +242,26 @@ class MetaStream():
             self.meta_fit(self.meta_table.drop(['regressor'], axis=1)[-self.meta_window:], self.meta_table['regressor'][-self.meta_window:])
 
         # TODO: store data as variable stop printing things like this
-        print("Mean score Recommended {:.2f}+-{:.2f}".format(np.mean(score_recommended), np.std(score_recommended)))
-        print(len([i for i, j in zip(m_actual, m_recommended) if i == j]) / len(m_actual))
+        print("Mean score Recommended {:.3f}+-{:.3f}".format(np.mean(score_recommended), np.std(score_recommended)))
+        print("Meta-level score Recommended {:.3f}".format(len([i for i, j in zip(m_actual, m_recommended) if i == j]) / len(m_actual)))
+        # print(m_recommended)
+        # print(nmse(np.array(m_actual), np.array(m_recommended)))
         
         if default:
-            print("Mean score default {:.2f}+-{:.2f}".format(np.mean(default_scores), np.std(default_scores)))
+            print("Mean score default {:.3f}+-{:.3f}".format(np.mean(default_scores), np.std(default_scores)))
             # print(len(m_actual), len(default_recommended))
             # print(default_recommended)
-            print(len([i for i, j in zip(m_actual, default_recommended) if i == j]) / len(m_actual))
+            print("Meta-level score default {:.3f}".format(len([i for i, j in zip(m_actual, default_recommended) if i == j]) / len(m_actual)))
+            # print(nmse(np.array(default_recommended), np.array(m_actual)))  
 
         if ensemble:
-            print("Mean score ensemble {:.2f}+-{:.2f}".format(np.mean(ensemble_scores), np.std(ensemble_scores)))
+            print("Mean score ensemble {:.3f}+-{:.3f}".format(np.mean(ensemble_scores), np.std(ensemble_scores)))
 
 
     # TODO: make private
     # NOTE: meta fit is performed on the meta-learner
     def meta_fit(self, X, y):
-        self.meta_learner.fit(X, y)
+        self.meta_learner.fit(X.values, y.values)
 
     # TODO: make private
     # NOTE: meta predict is performed on the meta-learner
@@ -305,6 +309,6 @@ if __name__ == "__main__":
     # creates baseline meta-data
     metas.base_train(data=df, target='nswdemand')
 
-    metas.meta_train(data=df, target='nswdemand', default=True, ensemble=True)
+    metas.meta_train(data=df, target='nswdemand', default=True, ensemble=False)
 
 
