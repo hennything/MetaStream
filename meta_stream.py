@@ -17,20 +17,21 @@ COMBINATION = 'combination'
 class MetaStream():
 
     # TODO: add error message if the size of the initial meta-table has less instances than features
-    def __init__(self, meta_learner, learners, base_window=100, base_sel_window_size=10, meta_window=200, strategy=None, threshold=None):
+    def __init__(self, meta_learner, learners, base_window=100, base_delay_window=0, base_sel_window_size=10, meta_window=200, strategy=None, threshold=None):
 
         self.meta_learner = meta_learner
         self.learners = learners
 
         self.base_window = base_window
+        self.base_delay_window = base_delay_window
         self.base_sel_window_size = base_sel_window_size
         self.meta_window = meta_window
         self.strategy = strategy
         self.threshold = threshold
         self.num_learners = len(self.learners)
 
-        if self.strategy != None and len(self.learners) > 2:
-            raise ValueError("When using 'tie' or 'combination' strategy MetaStream must receive exactly 2 learners")
+        if self.strategy != COMBINATION and len(self.learners) > 2:
+            raise ValueError("When using 'tie' strategy MetaStream must receive exactly 2 learners")
         elif self.strategy != None and self.strategy != TIE and self.strategy != COMBINATION:
             raise ValueError("strategy can only be 1 of 3 options (None, 'tie', 'combination')")
         elif self.strategy == TIE and self.threshold == None:
@@ -120,8 +121,9 @@ class MetaStream():
         for idx in range(self.meta_window):
 
             train = data.iloc[idx * self.base_sel_window_size : idx * self.base_sel_window_size + self.base_window]
-            sel = data.iloc[idx * self.base_sel_window_size + self.base_window : (idx + 1) * self.base_sel_window_size + self.base_window]
-
+            sel = data.iloc[self.base_delay_window + idx * self.base_sel_window_size + self.base_window : (idx + 1) * self.base_sel_window_size + self.base_window]
+            # print(train.index)
+            # print(sel.index)
             X_train, y_train = train.drop(target, axis=1), train[target]
             X_sel, y_sel = sel.drop(target, axis=1), sel[target]
 
@@ -143,9 +145,6 @@ class MetaStream():
                 meta_features.update({'regressor' : np.argmin(scores)})
 
             self.meta_table = self.meta_table.append(meta_features, ignore_index=True)
-
-        # self.base_index = idx
-        print(self.meta_table)
 
     # TODO: make private
     # NOTE: base fit is performed on the base-learners
@@ -182,22 +181,26 @@ class MetaStream():
         for idx in range(self.meta_window, max_data_size):
 
             train = data.iloc[idx * self.base_sel_window_size : idx * self.base_sel_window_size + self.base_window]
-            sel = data.iloc[idx * self.base_sel_window_size + self.base_window : (idx + 1) * self.base_sel_window_size + self.base_window]
+            sel = data.iloc[self.base_delay_window + idx * self.base_sel_window_size + self.base_window : (idx + 1) * self.base_sel_window_size + self.base_window]
 
             X_train, y_train = train.drop(target, axis=1), train[target]
             X_sel, y_sel = sel.drop(target, axis=1), sel[target]
 
             meta_features = self.meta_features(X_train, y_train, X_sel)
             pred = int(self.meta_predict(np.array(list(meta_features.values()), dtype=object).reshape(1, -1)))
-            print(pred)
             m_recommended.append(pred)
 
-            if self.strategy == None: 
+            # if self.strategy == None: 
+            #     score = nmse(list(y_sel), self.learners[pred].fit(X_train, y_train).predict(X_sel))
+            #     score_recommended.append(score)
+
+            if self.strategy != None and pred == self.num_learners:
+                score_recommended.append(self.ensemble(X_train, y_train, X_sel, y_sel))
+            else:
                 score = nmse(list(y_sel), self.learners[pred].fit(X_train, y_train).predict(X_sel))
                 score_recommended.append(score)
-            
-            elif self.strategy == TIE or self.strategy == COMBINATION:
-                score_recommended.append(self.ensemble(X_train, y_train, X_sel, y_sel))
+            # elif self.strategy == TIE or self.strategy == COMBINATION:
+            #     score_recommended.append(self.ensemble(X_train, y_train, X_sel, y_sel))
 
             if default:
                 default_learner = int(self.meta_table['regressor'].value_counts().idxmax())
@@ -243,7 +246,7 @@ class MetaStream():
 
         # TODO: store data as variable stop printing things like this
         print("Mean score Recommended {:.3f}+-{:.3f}".format(np.mean(score_recommended), np.std(score_recommended)))
-        print("Meta-level score Recommended {:.3f}".format(len([i for i, j in zip(m_actual, m_recommended) if i == j]) / len(m_actual)))
+        print("Meta-level score Recommended {:.3f}".format(1 - len([i for i, j in zip(m_actual, m_recommended) if i == j]) / len(m_actual)))
         # print(m_recommended)
         # print(nmse(np.array(m_actual), np.array(m_recommended)))
         
@@ -251,7 +254,7 @@ class MetaStream():
             print("Mean score default {:.3f}+-{:.3f}".format(np.mean(default_scores), np.std(default_scores)))
             # print(len(m_actual), len(default_recommended))
             # print(default_recommended)
-            print("Meta-level score default {:.3f}".format(len([i for i, j in zip(m_actual, default_recommended) if i == j]) / len(m_actual)))
+            print("Meta-level score default {:.3f}".format(1 - len([i for i, j in zip(m_actual, default_recommended) if i == j]) / len(m_actual)))
             # print(nmse(np.array(default_recommended), np.array(m_actual)))  
 
         if ensemble:
@@ -275,15 +278,16 @@ class MetaStream():
 # TODO: need to remove this after experiimentation
 if __name__ == "__main__":
 
-
     parser = argparse.ArgumentParser()
     parser.add_argument('datapath', type=pathlib.Path)
-
+    
     parser.add_argument('-base_data_window', default=100, type=int)
+    parser.add_argument('-base_delay_window', default=0, type=int)
     parser.add_argument('-base_sel_window_size', default=10, type=int)
     parser.add_argument('-meta_data_window', default=200, type=int)
 
     base_data_window = parser.parse_args().base_data_window
+    base_delay_window = parser.parse_args().base_delay_window
     base_sel_window_size = parser.parse_args().base_sel_window_size
     meta_data_window = parser.parse_args().meta_data_window
 
@@ -294,21 +298,20 @@ if __name__ == "__main__":
     models =    [
                 # SVR(),
                 RandomForestRegressor(random_state=42),
-                # LinearRegression(),
+                LinearRegression(),
                 # Lasso(),
                 # Ridge(),
                 GradientBoostingRegressor(random_state=42)
                 ]
 
-
     # NOTE: meta-learner
     meta_learner = RandomForestClassifier()
 
-    metas = MetaStream(meta_learner, models, base_data_window, base_sel_window_size, meta_data_window, strategy='combination', threshold=.05)
+    metas = MetaStream(meta_learner, models, base_data_window, base_delay_window, base_sel_window_size, meta_data_window, strategy='combination', threshold=.05)
 
     # creates baseline meta-data
     metas.base_train(data=df, target='nswdemand')
 
-    metas.meta_train(data=df, target='nswdemand', default=True, ensemble=False)
+    metas.meta_train(data=df, target='nswdemand', default=True, ensemble=True)
 
 
