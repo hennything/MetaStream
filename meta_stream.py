@@ -190,17 +190,11 @@ class MetaStream():
             pred = int(self.meta_predict(np.array(list(meta_features.values()), dtype=object).reshape(1, -1)))
             m_recommended.append(pred)
 
-            # if self.strategy == None: 
-            #     score = nmse(list(y_sel), self.learners[pred].fit(X_train, y_train).predict(X_sel))
-            #     score_recommended.append(score)
-
             if self.strategy != None and pred == self.num_learners:
                 score_recommended.append(self.ensemble(X_train, y_train, X_sel, y_sel))
             else:
                 score = nmse(list(y_sel), self.learners[pred].fit(X_train, y_train).predict(X_sel))
                 score_recommended.append(score)
-            # elif self.strategy == TIE or self.strategy == COMBINATION:
-            #     score_recommended.append(self.ensemble(X_train, y_train, X_sel, y_sel))
 
             if default:
                 default_learner = int(self.meta_table['regressor'].value_counts().idxmax())
@@ -247,15 +241,10 @@ class MetaStream():
         # TODO: store data as variable stop printing things like this
         print("Mean score Recommended {:.3f}+-{:.3f}".format(np.mean(score_recommended), np.std(score_recommended)))
         print("Meta-level score Recommended {:.3f}".format(1 - len([i for i, j in zip(m_actual, m_recommended) if i == j]) / len(m_actual)))
-        # print(m_recommended)
-        # print(nmse(np.array(m_actual), np.array(m_recommended)))
         
         if default:
             print("Mean score default {:.3f}+-{:.3f}".format(np.mean(default_scores), np.std(default_scores)))
-            # print(len(m_actual), len(default_recommended))
-            # print(default_recommended)
             print("Meta-level score default {:.3f}".format(1 - len([i for i, j in zip(m_actual, default_recommended) if i == j]) / len(m_actual)))
-            # print(nmse(np.array(default_recommended), np.array(m_actual)))  
 
         if ensemble:
             print("Mean score ensemble {:.3f}+-{:.3f}".format(np.mean(ensemble_scores), np.std(ensemble_scores)))
