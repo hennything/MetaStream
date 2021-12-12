@@ -17,7 +17,7 @@ COMBINATION = 'combination'
 class MetaStream():
 
     # TODO: add error message if the size of the initial meta-table has less instances than features
-    def __init__(self, meta_learner, learners, base_window=100, base_delay_window=0, base_sel_window_size=10, meta_window=200, strategy=None, threshold=None):
+    def __init__(self, meta_learner, learners, base_window=100, base_delay_window=0, base_sel_window_size=10, meta_window=200, strategy=None, threshold=None, report=False):
 
         self.meta_learner = meta_learner
         self.learners = learners
@@ -28,14 +28,17 @@ class MetaStream():
         self.meta_window = meta_window
         self.strategy = strategy
         self.threshold = threshold
+        self.report = report
         self.num_learners = len(self.learners)
 
         if self.strategy != COMBINATION and len(self.learners) > 2:
-            raise ValueError("When using 'tie' strategy MetaStream must receive exactly 2 learners")
+            raise ValueError("when using 'tie' strategy MetaStream must receive exactly 2 learners")
         elif self.strategy != None and self.strategy != TIE and self.strategy != COMBINATION:
             raise ValueError("strategy can only be 1 of 3 options (None, 'tie', 'combination')")
         elif self.strategy == TIE and self.threshold == None:
             raise ValueError("When using 'tie' strategy threshold must be provided")
+        elif self.strategy != TIE and self.report == True:
+            raise ValueError("full regressor report is only generated for the 'tie' strategy")
 
         self.meta_table = pd.DataFrame()
 
@@ -157,18 +160,24 @@ class MetaStream():
         return [learner.predict(X) for learner in self.learners]
 
     # TODO: create auxiliary function
-    def meta_train(self, data, target, default=False, ensemble=False):
+    def meta_train(self, data, target, default=False, ensemble=False, report=False):
 
         # initial meta-fit
         self._meta_fit(self.meta_table.drop(['regressor'], axis=1), self.meta_table['regressor'])
         
         max_data_size = int((data.shape[0] - self.base_window) / self.base_sel_window_size)
 
+        # TODO: move this to constructor
         if default: 
             default_scores = []
             default_recommended = []
         
+        # TODO: move this to constructor
         if ensemble: ensemble_scores = []
+
+        if report: 
+            reg_1_scores = []
+            reg_2_scores = []
 
         m_recommended = []
         score_recommended = []
@@ -191,6 +200,11 @@ class MetaStream():
             else:
                 score = nmse(list(y_sel), self.learners[pred].fit(X_train, y_train).predict(X_sel))
                 score_recommended.append(score)
+
+            if report and self.strategy == TIE:
+                scores = [learner.fit(X_train, y_train).predict(X_sel) for learner in self.learners]
+                reg_1_scores.append(nmse(list(y_sel), scores[0]))
+                reg_2_scores.append(nmse(list(y_sel), scores[1]))
 
             if default:
                 default_learner = int(self.meta_table['regressor'].value_counts().idxmax())
@@ -249,6 +263,10 @@ class MetaStream():
             self.mean_score_ensemble = np.mean(ensemble_scores)
             print("Mean score ensemble {:.3f}+-{:.3f}".format(np.mean(ensemble_scores), np.std(ensemble_scores)))
 
+        if report:
+            print(np.mean(reg_1_scores))
+            print(np.mean(reg_2_scores))
+
     # NOTE: meta fit is performed on the meta-learner
     def _meta_fit(self, X, y):
         """
@@ -287,7 +305,7 @@ if __name__ == "__main__":
     models =    [
                 # SVR(),
                 RandomForestRegressor(random_state=42),
-                LinearRegression(),
+                # LinearRegression(),
                 # Lasso(),
                 # Ridge(),
                 GradientBoostingRegressor(random_state=42)
@@ -296,11 +314,11 @@ if __name__ == "__main__":
     # NOTE: meta-learner
     meta_learner = RandomForestClassifier()
 
-    metas = MetaStream(meta_learner, models, base_data_window, base_delay_window, base_sel_window_size, meta_data_window, strategy='combination', threshold=.05)
+    metas = MetaStream(meta_learner, models, base_data_window, base_delay_window, base_sel_window_size, meta_data_window, strategy='tie', threshold=.05)
 
     # creates baseline meta-data
     metas.base_train(data=df, target='nswdemand')
 
-    metas.meta_train(data=df, target='nswdemand', default=True, ensemble=True)
+    metas.meta_train(data=df, target='nswdemand', default=False, ensemble=False, report=True)
 
 
