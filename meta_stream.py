@@ -17,6 +17,7 @@ COMBINATION = 'combination'
 class MetaStream():
 
     # TODO: add error message if the size of the initial meta-table has less instances than features
+    # TODO: add reporting functionality to constructor and remove them from the individual functions (i.e. meta-fit)
     def __init__(self, meta_learner, learners, base_window=100, base_delay_window=0, base_sel_window_size=10, meta_window=200, strategy=None, threshold=None, report=False):
 
         self.meta_learner = meta_learner
@@ -319,6 +320,6 @@ if __name__ == "__main__":
     # creates baseline meta-data
     metas.base_train(data=df, target='nswdemand')
 
-    metas.meta_train(data=df, target='nswdemand', default=False, ensemble=False, report=True)
+    metas.meta_train(data=df, target='nswdemand', default=False, ensemble=False, report=False)
 
 
