@@ -1,4 +1,4 @@
-from sklearn.linear_model import LinearRegression, Ridge, Lasso, SGDClassifier
+from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
@@ -39,9 +39,7 @@ class MetaStream():
 
         self.meta_table = pd.DataFrame()
 
-
-    # TODO: allow user input for which meta-features to inspect
-    def meta_features(self, X_train, y_train, X_sel):
+    def _meta_features(self, X_train, y_train, X_sel):
 
         temp = {}
 
@@ -103,13 +101,11 @@ class MetaStream():
 
         return temp
 
-
-    def ensemble(self, X_train, y_train, X_sel, y_sel):
+    def _ensemble(self, X_train, y_train, X_sel, y_sel):
         scores = [learner.fit(X_train, y_train).predict(X_sel) for learner in self.learners]
         scores = np.array([sum(i)/len(self.learners) for i in zip(*scores)])
         score = nmse(list(y_sel), scores)
         return score
-
 
    # NOTE: initial base fit   
     def base_train(self, data, target):
@@ -127,10 +123,10 @@ class MetaStream():
             X_train, y_train = train.drop(target, axis=1), train[target]
             X_sel, y_sel = sel.drop(target, axis=1), sel[target]
 
-            meta_features = self.meta_features(X_train, y_train, X_sel)
-            self.base_fit(X_train, y_train)
+            meta_features = self._meta_features(X_train, y_train, X_sel)
+            self._base_fit(X_train, y_train)
 
-            preds = self.base_predict(X_sel)
+            preds = self._base_predict(X_sel)
             scores = [nmse(pred, y_sel) for pred in preds]
             if self.strategy == None:
                 meta_features.update({'regressor' : np.argmin(scores)})    
@@ -146,25 +142,25 @@ class MetaStream():
 
             self.meta_table = self.meta_table.append(meta_features, ignore_index=True)
 
-    # TODO: make private
     # NOTE: base fit is performed on the base-learners
-    def base_fit(self, X, y):
+    def _base_fit(self, X, y):
+        """
+        fit the base-learners using training data
+        """
         [learner.fit(X, y) for learner in self.learners]
     
-    # TODO: make private
     # NOTE: base predict is performed on the base-learners
-    def base_predict(self, X):
+    def _base_predict(self, X):
         """
         returns: a prediction for each of the base-learners
         """
         return [learner.predict(X) for learner in self.learners]
 
-
     # TODO: create auxiliary function
     def meta_train(self, data, target, default=False, ensemble=False):
 
         # initial meta-fit
-        self.meta_fit(self.meta_table.drop(['regressor'], axis=1), self.meta_table['regressor'])
+        self._meta_fit(self.meta_table.drop(['regressor'], axis=1), self.meta_table['regressor'])
         
         max_data_size = int((data.shape[0] - self.base_window) / self.base_sel_window_size)
 
@@ -186,12 +182,12 @@ class MetaStream():
             X_train, y_train = train.drop(target, axis=1), train[target]
             X_sel, y_sel = sel.drop(target, axis=1), sel[target]
 
-            meta_features = self.meta_features(X_train, y_train, X_sel)
-            pred = int(self.meta_predict(np.array(list(meta_features.values()), dtype=object).reshape(1, -1)))
+            meta_features = self._meta_features(X_train, y_train, X_sel)
+            pred = int(self._meta_predict(np.array(list(meta_features.values()), dtype=object).reshape(1, -1)))
             m_recommended.append(pred)
 
             if self.strategy != None and pred == self.num_learners:
-                score_recommended.append(self.ensemble(X_train, y_train, X_sel, y_sel))
+                score_recommended.append(self._ensemble(X_train, y_train, X_sel, y_sel))
             else:
                 score = nmse(list(y_sel), self.learners[pred].fit(X_train, y_train).predict(X_sel))
                 score_recommended.append(score)
@@ -200,16 +196,16 @@ class MetaStream():
                 default_learner = int(self.meta_table['regressor'].value_counts().idxmax())
                 default_recommended.append(default_learner)
                 if default_learner == self.num_learners and self.strategy != None:
-                    default_scores.append(self.ensemble(X_train, y_train, X_sel, y_sel))
+                    default_scores.append(self._ensemble(X_train, y_train, X_sel, y_sel))
                 else:
                     default_score = nmse(list(y_sel), self.learners[default_learner].fit(X_train, y_train).predict(X_sel))
                     default_scores.append(default_score)
 
             if ensemble:
-                ensemble_scores.append(self.ensemble(X_train, y_train, X_sel, y_sel))
+                ensemble_scores.append(self._ensemble(X_train, y_train, X_sel, y_sel))
 
-            self.base_fit(X_train, y_train)
-            preds = self.base_predict(X_sel)
+            self._base_fit(X_train, y_train)
+            preds = self._base_predict(X_sel)
             scores = [nmse(pred, y_sel) for pred in preds]
             if self.strategy == None:
                 regressor = np.argmin(scores)
@@ -234,30 +230,34 @@ class MetaStream():
                 m_actual.append(regressor)
                 meta_features.update({'regressor' : regressor})
 
-            
             # sliding window for the meta-table
-            self.meta_fit(self.meta_table.drop(['regressor'], axis=1)[-self.meta_window:], self.meta_table['regressor'][-self.meta_window:])
+            self._meta_fit(self.meta_table.drop(['regressor'], axis=1)[-self.meta_window:], self.meta_table['regressor'][-self.meta_window:])
 
         # TODO: store data as variable stop printing things like this
+        self.mean_score_recommended = np.mean(score_recommended)
+        self.meta_level_score_recommended = 1 - len([i for i, j in zip(m_actual, m_recommended) if i == j]) / len(m_actual)
         print("Mean score Recommended {:.3f}+-{:.3f}".format(np.mean(score_recommended), np.std(score_recommended)))
         print("Meta-level score Recommended {:.3f}".format(1 - len([i for i, j in zip(m_actual, m_recommended) if i == j]) / len(m_actual)))
         
         if default:
+            self.mean_score_default = np.mean(default_scores)
+            self.meta_level_score_default = 1 - len([i for i, j in zip(m_actual, default_recommended) if i == j]) / len(m_actual)
             print("Mean score default {:.3f}+-{:.3f}".format(np.mean(default_scores), np.std(default_scores)))
             print("Meta-level score default {:.3f}".format(1 - len([i for i, j in zip(m_actual, default_recommended) if i == j]) / len(m_actual)))
 
         if ensemble:
+            self.mean_score_ensemble = np.mean(ensemble_scores)
             print("Mean score ensemble {:.3f}+-{:.3f}".format(np.mean(ensemble_scores), np.std(ensemble_scores)))
 
-
-    # TODO: make private
     # NOTE: meta fit is performed on the meta-learner
-    def meta_fit(self, X, y):
+    def _meta_fit(self, X, y):
+        """
+        fit the meta-learner using training data
+        """
         self.meta_learner.fit(X.values, y.values)
 
-    # TODO: make private
     # NOTE: meta predict is performed on the meta-learner
-    def meta_predict(self, X):
+    def _meta_predict(self, X):
         """
         returns: a prediction for the meta-learner
         """
