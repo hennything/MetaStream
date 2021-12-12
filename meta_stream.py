@@ -232,11 +232,9 @@ class MetaStream():
                     regressor = np.argmin(scores)
                     m_actual.append(regressor)
                     meta_features.update({'regressor' : regressor})
-                    # print('regressor: ', regressor, scores)
                 else:
                     m_actual.append(self.num_learners)
                     meta_features.update({'regressor' : self.num_learners})
-                    # print('tie: ', scores)
 
             elif self.strategy == 'combination':
                 pred_combination = np.array([sum(i)/len(self.learners) for i in zip(*preds)])
@@ -265,8 +263,8 @@ class MetaStream():
             print("Mean score ensemble {:.3f}+-{:.3f}".format(np.mean(ensemble_scores), np.std(ensemble_scores)))
 
         if report:
-            print(np.mean(reg_1_scores))
-            print(np.mean(reg_2_scores))
+            print("Mean score reg 1. {:.3f}".format(np.mean(reg_1_scores)))
+            print("Mean score reg 2. {:.3f}".format(np.mean(reg_2_scores)))
 
     # NOTE: meta fit is performed on the meta-learner
     def _meta_fit(self, X, y):
@@ -320,6 +318,6 @@ if __name__ == "__main__":
     # creates baseline meta-data
     metas.base_train(data=df, target='nswdemand')
 
-    metas.meta_train(data=df, target='nswdemand', default=False, ensemble=False, report=False)
+    metas.meta_train(data=df, target='nswdemand', default=False, ensemble=False, report=True)
 
 
