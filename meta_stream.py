@@ -49,11 +49,15 @@ class MetaStream():
 
         # train window 
         for i, col in enumerate(X_train):
+            X_train_percentiles = np.percentile(X_train[col], (25, 75))
+            X_train_iqr = X_train_percentiles[1] - X_train_percentiles[0]
+
             temp.update({"X_train_mean_"+str(i): np.mean(X_train[col])})
             temp.update({"X_train_var_"+str(i): np.var(X_train[col])})
             temp.update({"X_train_min_"+str(i): np.min(X_train[col])})
             temp.update({"X_train_max_"+str(i): np.max(X_train[col])})
             temp.update({"X_train_median_"+str(i): np.median(X_train[col])})
+            temp.update({"X_sel_dispersion_"+str(i): X_train_iqr})
 
         # train window
         y_train_percentiles = np.percentile(y_train, (25, 75))
@@ -84,7 +88,6 @@ class MetaStream():
             temp.update({"X_sel_max_"+str(i): np.max(X_sel[col])})
             temp.update({"X_sel_median_"+str(i): np.median(X_sel[col])})
             temp.update({"X_sel_prob_outliers_"+str(i): X_sel_prob_outliers})
-            temp.update({"X_sel_dispersion_"+str(i): X_sel_iqr})
 
         # selection window
         # correlation between numerical attributes
