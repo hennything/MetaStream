@@ -18,14 +18,14 @@ class MetaStream():
 
     # TODO: add error message if the size of the initial meta-table has less instances than features
     # TODO: add reporting functionality to constructor and remove them from the individual functions (i.e. meta-fit)
-    def __init__(self, meta_learner, learners, base_window=100, base_delay_window=0, base_sel_window_size=10, meta_window=200, strategy=None, threshold=None, report=False):
+    def __init__(self, meta_learner, learners, base_window=100, base_delay_window=0, base_sel_window=10, meta_window=200, strategy=None, threshold=None, report=False):
 
         self.meta_learner = meta_learner
         self.learners = learners
 
         self.base_window = base_window
         self.base_delay_window = base_delay_window
-        self.base_sel_window_size = base_sel_window_size
+        self.base_sel_window = base_sel_window
         self.meta_window = meta_window
         self.strategy = strategy
         self.threshold = threshold
@@ -120,8 +120,8 @@ class MetaStream():
         """
         for idx in range(self.meta_window):
 
-            train = data.iloc[idx * self.base_sel_window_size : idx * self.base_sel_window_size + self.base_window]
-            sel = data.iloc[self.base_delay_window + idx * self.base_sel_window_size + self.base_window : (idx + 1) * self.base_sel_window_size + self.base_window]
+            train = data.iloc[idx * self.base_sel_window : idx * self.base_sel_window + self.base_window]
+            sel = data.iloc[self.base_delay_window + idx * self.base_sel_window + self.base_window : (idx + 1) * self.base_sel_window + self.base_window]
             # print(train.index)
             # print(sel.index)
             X_train, y_train = train.drop(target, axis=1), train[target]
@@ -166,7 +166,7 @@ class MetaStream():
         # initial meta-fit
         self._meta_fit(self.meta_table.drop(['regressor'], axis=1), self.meta_table['regressor'])
         
-        max_data_size = int((data.shape[0] - self.base_window) / self.base_sel_window_size)
+        max_data_size = int((data.shape[0] - self.base_window) / self.base_sel_window)
 
         # TODO: move this to constructor
         if default: 
@@ -186,8 +186,8 @@ class MetaStream():
 
         for idx in range(self.meta_window, max_data_size):
 
-            train = data.iloc[idx * self.base_sel_window_size : idx * self.base_sel_window_size + self.base_window]
-            sel = data.iloc[self.base_delay_window + idx * self.base_sel_window_size + self.base_window : (idx + 1) * self.base_sel_window_size + self.base_window]
+            train = data.iloc[idx * self.base_sel_window : idx * self.base_sel_window + self.base_window]
+            sel = data.iloc[self.base_delay_window + idx * self.base_sel_window + self.base_window : (idx + 1) * self.base_sel_window + self.base_window]
 
             X_train, y_train = train.drop(target, axis=1), train[target]
             X_sel, y_sel = sel.drop(target, axis=1), sel[target]
@@ -289,12 +289,12 @@ if __name__ == "__main__":
     
     parser.add_argument('-base_data_window', default=100, type=int)
     parser.add_argument('-base_delay_window', default=0, type=int)
-    parser.add_argument('-base_sel_window_size', default=10, type=int)
+    parser.add_argument('-base_sel_window', default=10, type=int)
     parser.add_argument('-meta_data_window', default=200, type=int)
 
     base_data_window = parser.parse_args().base_data_window
     base_delay_window = parser.parse_args().base_delay_window
-    base_sel_window_size = parser.parse_args().base_sel_window_size
+    base_sel_window = parser.parse_args().base_sel_window
     meta_data_window = parser.parse_args().meta_data_window
 
     df = pd.read_csv(parser.parse_args().datapath)
@@ -303,8 +303,8 @@ if __name__ == "__main__":
     # NOTE: list of regression algorithms
     models =    [
                 # SVR(),
-                RandomForestRegressor(random_state=42),
-                # LinearRegression(),
+                # RandomForestRegressor(random_state=42),
+                LinearRegression(),
                 # Lasso(),
                 # Ridge(),
                 GradientBoostingRegressor(random_state=42)
@@ -313,11 +313,11 @@ if __name__ == "__main__":
     # NOTE: meta-learner
     meta_learner = RandomForestClassifier()
 
-    metas = MetaStream(meta_learner, models, base_data_window, base_delay_window, base_sel_window_size, meta_data_window, strategy='tie', threshold=.05)
+    metas = MetaStream(meta_learner, models, base_data_window, base_delay_window, base_sel_window, meta_data_window, strategy='tie', threshold=.1)
 
     # creates baseline meta-data
     metas.base_train(data=df, target='nswdemand')
 
-    metas.meta_train(data=df, target='nswdemand', default=False, ensemble=False, report=True)
+    metas.meta_train(data=df, target='nswdemand', default=True, ensemble=True, report=True)
 
 
