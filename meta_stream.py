@@ -249,15 +249,18 @@ class MetaStream():
             # sliding window for the meta-table
             self._meta_fit(self.meta_table.drop(['regressor'], axis=1)[-self.meta_window:], self.meta_table['regressor'][-self.meta_window:])
 
+        meta_scores = []
         # TODO: store data as variable stop printing things like this
         self.mean_score_recommended = np.mean(score_recommended)
         self.meta_level_score_recommended = 1 - len([i for i, j in zip(m_actual, m_recommended) if i == j]) / len(m_actual)
+        meta_scores.append(self.meta_level_score_recommended)
         print("Mean score Recommended {:.3f}+-{:.3f}".format(np.mean(score_recommended), np.std(score_recommended)))
         print("Meta-level score Recommended {:.3f}".format(1 - len([i for i, j in zip(m_actual, m_recommended) if i == j]) / len(m_actual)))
-        
+
         if default:
             self.mean_score_default = np.mean(default_scores)
             self.meta_level_score_default = 1 - len([i for i, j in zip(m_actual, default_recommended) if i == j]) / len(m_actual)
+            meta_scores.append(self.meta_level_score_default)
             print("Mean score default {:.3f}+-{:.3f}".format(np.mean(default_scores), np.std(default_scores)))
             print("Meta-level score default {:.3f}".format(1 - len([i for i, j in zip(m_actual, default_recommended) if i == j]) / len(m_actual)))
 
@@ -268,6 +271,8 @@ class MetaStream():
         if report:
             print("Mean score reg 1. {:.3f}".format(np.mean(reg_1_scores)))
             print("Mean score reg 2. {:.3f}".format(np.mean(reg_2_scores)))
+
+        return meta_scores
 
     # NOTE: meta fit is performed on the meta-learner
     def _meta_fit(self, X, y):
