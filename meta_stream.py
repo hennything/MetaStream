@@ -17,8 +17,7 @@ COMBINATION = 'combination'
 class MetaStream():
 
     # TODO: add error message if the size of the initial meta-table has less instances than features
-    # TODO: add reporting functionality to constructor and remove them from the individual functions (i.e. meta-fit)
-    def __init__(self, meta_learner, learners, base_window=100, base_delay_window=0, base_sel_window=10, meta_window=200, strategy=None, threshold=None, report=False):
+    def __init__(self, meta_learner, learners, base_window=100, base_delay_window=0, base_sel_window=10, meta_window=200, strategy=None, default=False, ensemble=False, threshold=None, pairs=False):
 
         self.meta_learner = meta_learner
         self.learners = learners
@@ -28,8 +27,18 @@ class MetaStream():
         self.base_sel_window = base_sel_window
         self.meta_window = meta_window
         self.strategy = strategy
+        self.default = default
+        if self.default: 
+            self.default_scores = []
+            self.default_recommended = []
+
+        self.ensemble = ensemble
+        if self.ensemble: self.ensemble_scores = []
         self.threshold = threshold
-        self.report = report
+        self.pairs = pairs
+        if self.pairs:
+            self.reg_1_scores = []
+            self.reg_2_scores = []
         self.num_learners = len(self.learners)
 
         if self.strategy != COMBINATION and len(self.learners) > 2:
@@ -38,10 +47,14 @@ class MetaStream():
             raise ValueError("strategy can only be 1 of 3 options (None, 'tie', 'combination')")
         elif self.strategy == TIE and self.threshold == None:
             raise ValueError("When using 'tie' strategy threshold must be provided")
-        elif self.strategy != TIE and self.report == True:
-            raise ValueError("full regressor report is only generated for the 'tie' strategy")
+        elif self.pairs == True and self.num_learners > 2:
+            raise ValueError("full regressor report is only generated for pairs of regressors")
 
         self.meta_table = pd.DataFrame()
+
+        self.recommended = []
+        self.score_recommended = []
+        self.actual = []
 
     def _meta_features(self, X_train, y_train, X_sel):
 
@@ -163,29 +176,13 @@ class MetaStream():
         """
         return [learner.predict(X) for learner in self.learners]
 
-    # TODO: create auxiliary function
-    def meta_train(self, data, target, default=False, ensemble=False, report=False):
+    # TODO: could probably optimize by only running each regressor once uniquely
+    def meta_train(self, data, target):
 
         # initial meta-fit
         self._meta_fit(self.meta_table.drop(['regressor'], axis=1), self.meta_table['regressor'])
         
         max_data_size = int((data.shape[0] - self.base_window) / self.base_sel_window)
-
-        # TODO: move this to constructor
-        if default: 
-            default_scores = []
-            default_recommended = []
-        
-        # TODO: move this to constructor
-        if ensemble: ensemble_scores = []
-
-        if report: 
-            reg_1_scores = []
-            reg_2_scores = []
-
-        m_recommended = []
-        score_recommended = []
-        m_actual = []
 
         for idx in range(self.meta_window, max_data_size):
 
@@ -197,82 +194,57 @@ class MetaStream():
 
             meta_features = self._meta_features(X_train, y_train, X_sel)
             pred = int(self._meta_predict(np.array(list(meta_features.values()), dtype=object).reshape(1, -1)))
-            m_recommended.append(pred)
+            self.recommended.append(pred)
 
             if self.strategy != None and pred == self.num_learners:
-                score_recommended.append(self._ensemble(X_train, y_train, X_sel, y_sel))
+               self.score_recommended.append(self._ensemble(X_train, y_train, X_sel, y_sel))
             else:
                 score = nmse(list(y_sel), self.learners[pred].fit(X_train, y_train).predict(X_sel))
-                score_recommended.append(score)
+                self.score_recommended.append(score)
 
-            if report and self.strategy == TIE:
+            if self.pairs:
                 scores = [learner.fit(X_train, y_train).predict(X_sel) for learner in self.learners]
-                reg_1_scores.append(nmse(list(y_sel), scores[0]))
-                reg_2_scores.append(nmse(list(y_sel), scores[1]))
+                self.reg_1_scores.append(nmse(list(y_sel), scores[0]))
+                self.reg_2_scores.append(nmse(list(y_sel), scores[1]))
 
-            if default:
+            if self.default:
                 default_learner = int(self.meta_table['regressor'].value_counts().idxmax())
-                default_recommended.append(default_learner)
+                self.default_recommended.append(default_learner)
                 if default_learner == self.num_learners and self.strategy != None:
-                    default_scores.append(self._ensemble(X_train, y_train, X_sel, y_sel))
+                    self.default_scores.append(self._ensemble(X_train, y_train, X_sel, y_sel))
                 else:
                     default_score = nmse(list(y_sel), self.learners[default_learner].fit(X_train, y_train).predict(X_sel))
-                    default_scores.append(default_score)
+                    self.default_scores.append(default_score)
 
-            if ensemble:
-                ensemble_scores.append(self._ensemble(X_train, y_train, X_sel, y_sel))
+            if self.ensemble:
+                self.ensemble_scores.append(self._ensemble(X_train, y_train, X_sel, y_sel))
 
             self._base_fit(X_train, y_train)
             preds = self._base_predict(X_sel)
             scores = [nmse(pred, y_sel) for pred in preds]
             if self.strategy == None:
                 regressor = np.argmin(scores)
-                m_actual.append(np.argmin(regressor))
+                self.actual.append(np.argmin(regressor))
                 meta_features.update({'regressor' : np.argmin(regressor)})
 
             elif self.strategy == 'tie':
                 if percentage_difference(scores) > self.threshold:
                     regressor = np.argmin(scores)
-                    m_actual.append(regressor)
+                    self.actual.append(regressor)
                     meta_features.update({'regressor' : regressor})
                 else:
-                    m_actual.append(self.num_learners)
+                    self.actual.append(self.num_learners)
                     meta_features.update({'regressor' : self.num_learners})
 
             elif self.strategy == 'combination':
                 pred_combination = np.array([sum(i)/len(self.learners) for i in zip(*preds)])
                 scores.append(nmse(pred_combination, y_sel))
                 regressor = np.argmin(scores)
-                m_actual.append(regressor)
+                self.actual.append(regressor)
                 meta_features.update({'regressor' : regressor})
 
             # sliding window for the meta-table
             self._meta_fit(self.meta_table.drop(['regressor'], axis=1)[-self.meta_window:], self.meta_table['regressor'][-self.meta_window:])
-
-        meta_scores = []
-        # TODO: store data as variable stop printing things like this
-        self.mean_score_recommended = np.mean(score_recommended)
-        self.meta_level_score_recommended = 1 - len([i for i, j in zip(m_actual, m_recommended) if i == j]) / len(m_actual)
-        meta_scores.append(self.meta_level_score_recommended)
-        print("Mean score Recommended {:.3f}+-{:.3f}".format(np.mean(score_recommended), np.std(score_recommended)))
-        print("Meta-level score Recommended {:.3f}".format(1 - len([i for i, j in zip(m_actual, m_recommended) if i == j]) / len(m_actual)))
-
-        if default:
-            self.mean_score_default = np.mean(default_scores)
-            self.meta_level_score_default = 1 - len([i for i, j in zip(m_actual, default_recommended) if i == j]) / len(m_actual)
-            meta_scores.append(self.meta_level_score_default)
-            print("Mean score default {:.3f}+-{:.3f}".format(np.mean(default_scores), np.std(default_scores)))
-            print("Meta-level score default {:.3f}".format(1 - len([i for i, j in zip(m_actual, default_recommended) if i == j]) / len(m_actual)))
-
-        if ensemble:
-            self.mean_score_ensemble = np.mean(ensemble_scores)
-            print("Mean score ensemble {:.3f}+-{:.3f}".format(np.mean(ensemble_scores), np.std(ensemble_scores)))
-
-        if report:
-            print("Mean score reg 1. {:.3f}".format(np.mean(reg_1_scores)))
-            print("Mean score reg 2. {:.3f}".format(np.mean(reg_2_scores)))
-
-        return meta_scores
 
     # NOTE: meta fit is performed on the meta-learner
     def _meta_fit(self, X, y):
@@ -287,6 +259,42 @@ class MetaStream():
         returns: a prediction for the meta-learner
         """
         return self.meta_learner.predict(X)
+
+    def get_results(self):
+        base_results = {}
+        meta_results = {}
+        
+        base_results['recommended'] = np.mean(self.score_recommended)
+        meta_results['recommended'] = 1 - len([i for i, j in zip(self.actual, self.recommended) if i == j]) / len(self.actual)
+
+        if self.default:
+            base_results['default'] = np.mean(self.default_scores)
+            meta_results['default'] = 1 - len([i for i, j in zip(self.actual, self.default_recommended) if i == j]) / len(self.actual)
+
+        if self.ensemble:
+            base_results['ensemble'] = np.mean(self.ensemble_scores)
+
+        if self.pairs:
+            base_results['regressor 1'] = np.mean(self.reg_1_scores)
+            base_results['regressor 2'] = np.mean(self.reg_2_scores)
+
+        return base_results, meta_results
+
+    def print_results(self):
+
+        print("Mean score recommended {:.3f}+-{:.3f}".format(np.mean(self.score_recommended), np.std(self.score_recommended)))
+        print("Meta-level score recommended {:.3f}".format(1 - len([i for i, j in zip(self.actual,self.recommended) if i == j]) / len(self.actual)))
+
+        if self.default:
+            print("Mean score default {:.3f}+-{:.3f}".format(np.mean(self.default_scores), np.std(self.default_scores)))
+            print("Meta-level score default {:.3f}".format(1 - len([i for i, j in zip(self.actual, self.default_recommended) if i == j]) / len(self.actual)))
+
+        if self.ensemble:
+            print("Mean score ensemble {:.3f}+-{:.3f}".format(np.mean(self.ensemble_scores), np.std(self.ensemble_scores)))
+
+        if self.pairs:
+            print("Mean score regressor 1 {:.3f}".format(np.mean(self.reg_1_scores)))
+            print("Mean score regressor 2 {:.3f}".format(np.mean(self.reg_2_scores)))
 
 
 # TODO: need to remove this after experiimentation
@@ -311,8 +319,8 @@ if __name__ == "__main__":
     # NOTE: list of regression algorithms
     models =    [
                 # SVR(),
-                # RandomForestRegressor(random_state=42),
-                LinearRegression(),
+                RandomForestRegressor(random_state=42),
+                # LinearRegression(),
                 # Lasso(),
                 # Ridge(),
                 GradientBoostingRegressor(random_state=42)
@@ -321,11 +329,19 @@ if __name__ == "__main__":
     # NOTE: meta-learner
     meta_learner = RandomForestClassifier()
 
-    metas = MetaStream(meta_learner, models, base_data_window, base_delay_window, base_sel_window, meta_data_window, strategy='tie', threshold=.1)
+    metas = MetaStream(meta_learner, models, base_data_window, base_delay_window, base_sel_window, meta_data_window, strategy='combination', default=True, ensemble=True, pairs=True, threshold=0.1)
 
     # creates baseline meta-data
     metas.base_train(data=df, target='nswdemand')
 
-    metas.meta_train(data=df, target='nswdemand', default=True, ensemble=True, report=True)
+    metas.meta_train(data=df, target='nswdemand')
+
+    metas.print_results()
+
+    base, meta = metas.get_results()
+    print(base)
+    print(meta)
+
+
 
 
